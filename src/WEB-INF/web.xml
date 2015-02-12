@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<web-app version="2.4">
+
+    <display-name>Simple Web Servlet Example</display-name>
+    <description>Simple Web Servlet Example</description>
+
+    <servlet>
+        <description/>
+        <display-name>MageStandardSessionServlet</display-name>
+        <servlet-name>MageStandardSessionServlet</servlet-name>
+        <servlet-class>\AppserverIo\Lab\MageServlet\MageStandardSessionServlet</servlet-class>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>MageStandardSessionServlet</servlet-name>
+        <url-pattern>/index.do</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>MageStandardSessionServlet</servlet-name>
+        <url-pattern>/index.do*</url-pattern>
+    </servlet-mapping>
+
+</web-app>

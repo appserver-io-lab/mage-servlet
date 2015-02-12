@@ -1,0 +1,137 @@
+<?xml version="1.0"?>
+<project name="appserver-io-apps/api-guard" default="composer-init" basedir=".">
+
+    <!-- initialize ENV variable -->
+    <property environment="env" />
+
+    <!-- ==================================================================== -->
+    <!-- Generate a time stamp for further use in build targets               -->
+    <!-- ==================================================================== -->
+    <tstamp>
+        <format property="time.stamp" pattern="yyyy-MM-dd_HHmmss"/>
+    </tstamp>
+
+    <!-- initialize file based properties -->
+    <property file="${basedir}/build.properties"/>
+    <property file="${basedir}/build.default.properties"/>
+    <property file="${basedir}/build.${os.family}.properties"/>
+
+    <!-- initialize the library specific properties -->
+    <property name="codepool" value="vendor"/>
+
+    <!-- initialize the directory where we can find the real build files -->
+    <property name="vendor.dir" value ="${basedir}/src/${codepool}" />
+    <property name="build.dir" value="${vendor.dir}/appserver-io/build" />
+    <property name="php-target.dir" value="${basedir}/target"/>
+    <property name="hub.address" value="appserver.io"/>
+    <property name="hub.snapshot-path" value="/var/www/apps.appserver.io/${appserver.webapp.name}/"/>
+
+    <!-- ==================================================================== -->
+    <!-- Import the common build configuration file                           -->
+    <!-- ==================================================================== -->
+    <import file="${build.dir}/common.xml" optional="true"/>
+
+    <!-- ==================================================================== -->
+    <!-- Checks if composer has installed it's dependencies                   -->
+    <!-- ==================================================================== -->
+    <target name="is-composer-installed">
+        <condition property="composer.present">
+            <available file="${build.dir}" type="dir"/>
+        </condition>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Installs all dependencies defined in composer.json                   -->
+    <!-- ==================================================================== -->
+    <target name="composer-install" depends="is-composer-installed" unless="composer.present" description="Installs all dependencies defined in composer.json">
+        <exec dir="${basedir}" executable="composer">
+            <arg line="--no-interaction --dev install"/>
+        </exec>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Updates composer dependencies defined in composer.json               -->
+    <!-- ==================================================================== -->
+    <target name="composer-update" depends="is-composer-installed" if="composer.present" description="Updates composer dependencies defined in composer.json">
+        <exec dir="${basedir}" executable="composer">
+            <arg line="--no-interaction --dev update"/>
+        </exec>
+    </target>
+
+    <!-- ===================================================================== -->
+    <!-- Checks if the build- and deployment stub has already been initialized -->
+    <!-- ===================================================================== -->
+    <target name="composer-init">
+        <antcall target="composer-install"/>
+        <antcall target="composer-update"/>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Copies the sources to the target directory                           -->
+    <!-- ==================================================================== -->
+    <target name="copy" description="Copies the sources to the target directory.">
+        <!-- prepare the directory structure -->
+        <antcall target="prepare"/>
+        <!-- copy sources and resources to the target directory -->
+        <copy todir="${php-target.dir}/${appserver.webapp.name}" preservelastmodified="true" overwrite="true">
+            <fileset dir="${php-src.dir}">
+                <include name="**/*" />
+                <exclude name="vendor/**" />
+            </fileset>
+        </copy>
+        <!-- install the composer library -->
+        <exec dir="${basedir}" executable="composer">
+            <env key="COMPOSER_VENDOR_DIR" value="${php-target.dir}/${appserver.webapp.name}/vendor" />
+            <arg line="--no-dev --optimize-autoloader install" />
+        </exec>
+        <!-- remove all .git directories -->
+        <delete includeemptydirs="true">
+            <fileset dir="${php-target.dir}/${appserver.webapp.name}" includes="**/.git/" defaultexcludes="false"/>
+        </delete>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Moves any built package to the download directory of the server.     -->
+    <!-- ==================================================================== -->
+    <target name="move-to-hub" description="Moves any built package to the download directory of the server.">
+        <!-- copy it once first -->
+        <copy file="${php-target.dir}/${package.filename}" tofile="${hub.snapshot-path}${package.filename}"/>
+        <!-- now move the file -->
+        <move file="${php-target.dir}/${package.filename}" tofile="${hub.snapshot-path}${appserver.webapp.name}-latest.phar"/>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Copies the sources to the deploy directory                           -->
+    <!-- ==================================================================== -->
+    <target name="deploy" depends="copy" description="Copies the sources to the deploy directory.">
+        <!-- copy the sources to the deploy directory -->
+        <echo message="Copy sources to ${deploy.dir} ..."/>
+    	<copy todir="${appserver.webapps.dir}" preservelastmodified="true" overwrite="true">
+            <fileset dir="${php-target.dir}">
+                <include name="**/*"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Creates a PHAR file for deployment     					  		  -->
+    <!-- ==================================================================== -->
+	<target name="create-phar" depends="copy" description="Creates a PHAR file for deployment.">
+        <!-- create the PHAR archive itself from the backup sources -->
+        <exec dir="${php-target.dir}" executable="${vendor.dir}/bin/phar">
+            <arg line="-c create -n ${php-target.dir}/${package.filename} -d ${php-target.dir}/${appserver.webapp.name}"/>
+        </exec>
+    </target>
+
+    <!-- ==================================================================== -->
+    <!-- Deploys the PHAR file into the configured deployment directory       -->
+    <!-- ==================================================================== -->
+    <target name="deploy-phar" depends="create-phar"
+            description="Deploys the PHAR file into the configured deployment directory.">
+        <copy file="${php-target.dir}/${package.filename}" tofile="${appserver.deploy.dir}/${appserver.webapp.name}.phar" failonerror="true"/>
+
+        <!-- create dodeploy flag to be transmitted via scp and do deploy on target system if needed -->
+        <touch file="${appserver.deploy.dir}/${appserver.webapp.name}.phar.dodeploy"/>
+    </target>
+
+</project>
